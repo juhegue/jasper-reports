@@ -193,7 +193,11 @@ class report_xml(models.Model):
             output = output.replace(src_chars[c], dst_chars[c])
         output = unicodedata.normalize('NFKD', output).encode('ASCII',
                                                               'ignore')
-        return output.strip('_').encode('utf-8')
+        output = output.strip('_').encode('utf-8')
+        # If the first char is not alpha, prepend "_"
+        if not output[:1].isalpha():
+            output = '_' + output
+        return output
 
     @api.model
     def generate_xml(self, pool, modelName, parentNode, document, depth,
