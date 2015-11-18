@@ -32,12 +32,13 @@
 ##############################################################################
 
 import os
-import glob
 import time
 import socket
 import subprocess
 import xmlrpclib
 import logging
+
+from openerp import tools
 from openerp.exceptions import except_orm
 from openerp.tools.translate import _
 
@@ -57,39 +58,33 @@ class JasperServer:
     def path(self):
         return os.path.abspath(os.path.dirname(__file__))
 
-    def setPidFile(self, pidfile):
+    def setPidFile(self, pidfile):  # [DEPRECATED]
         self.pidfile = pidfile
 
     def start(self):
-        env = {}
-        env.update(os.environ)
-        if os.name == 'nt':
-            a = ';'
-        else:
-            a = ':'
-        libs = os.path.join(self.path(), '..', 'java', 'lib', '*.jar')
-        env['CLASSPATH'
-            ] = os.path.join(self.path(), '..', 'java' + a
-                             ) + a.join(glob.glob(libs)
-                                        ) + a + os.path.join(self.path(),
-                                                             '..',
-                                                             'custom_reports')
+        env = os.environ.copy()
         cwd = os.path.join(self.path(), '..', 'java')
+        cp_separator = ';' if os.name == 'nt' else ':'
+
+        env['CLASSPATH'] = cp_separator.join([
+            cwd,
+            os.path.join(cwd, 'lib', '*'),
+            os.path.join(os.path.join(self.path(), '..', 'custom_reports')),
+            os.path.join(tools.config['jasperdata'], '.files'),
+        ])
 
         # Set headless = True because otherwise, java may use
         # existing X session and if session is closed JasperServer
         # would start throwing exceptions. So we better avoid
         # using the session at all.
-        command = ['java', '-Djava.awt.headless=true',
+        command = ['java', '-Djava.awt.headless=true', '-Xmx1024M',
                    'com.nantic.jasperreports.JasperServer',
                    unicode(self.port)]
         process = subprocess.Popen(command, env=env, cwd=cwd)
-        if self.pidfile:
-            f = open(self.pidfile, 'w')
-            try:
+
+        if tools.config['jasperpid']:
+            with open(tools.config['jasperpid'], 'w') as f:
                 f.write(str(process.pid))
-            finally:
-                f.close()
 
     def execute(self, *args):
         """
@@ -97,18 +92,18 @@ class JasperServer:
         """
         try:
             return self.proxy.Report.execute(*args)
-        except (xmlrpclib.ProtocolError, socket.error), e:
+        except (xmlrpclib.ProtocolError, socket.error) as e:
             self.start()
             for x in xrange(40):
                 time.sleep(1)
                 try:
                     return self.proxy.Report.execute(*args)
-                except (xmlrpclib.ProtocolError, socket.error), e:
+                except (xmlrpclib.ProtocolError, socket.error) as e:
                     self.error("EXCEPTION: %s %s" % (str(e), str(e.args)))
                     pass
-                except xmlrpclib.Fault, e:
+                except xmlrpclib.Fault as e:
                     raise except_orm(_('Report Error'), e.faultString)
-        except xmlrpclib.Fault, e:
+        except xmlrpclib.Fault as e:
             raise except_orm(_('Report Error'), e.faultString)
 
 # vim:noexpandtab:smartindent:tabstop=8:softtabstop=8:shiftwidth=8:

@@ -19,9 +19,12 @@
 			<field name="model">ir.actions.report.xml.file</field>
 			<field name="arch" type="xml">
 				<form string="Jasper Reports File">
-					<field name="file" filename="filename" />
-					<field name="filename" />
-					<field name="default" />
+					<group>
+						<field name="id" invisible="1"/>
+						<field name="file" filename="filename" attrs="{'readonly': [('id', '!=', False)]}" />
+						<field name="filename" attrs="{'readonly': [('id', '!=', False)]}" />
+						<field name="default" />
+					</group>
 				</form>
 			</field>
 		</record>
@@ -55,13 +58,7 @@
 					</group>
 					<group colspan="4">
 						<separator string="Files" colspan="4" />
-						<field name="jasper_file_ids" colspan="4" nolabel="1" widget="one2many_list">
-							<form string="Jasper Reports File">
-								<field name="file" filename="filename" string="File"/>
-								<field name="filename" />
-								<field name="default" />
-							</form>
-						</field>
+						<field name="jasper_file_ids" colspan="4" nolabel="1"/>
 						<separator string="Groups" colspan="4" />
 						<field name="groups_id" colspan="4" nolabel="1" />
 					</group>

@@ -7,6 +7,8 @@
 #                         Vikasa Infinity Anugrah <http://www.infi-nity.com>
 # Copyright (C) 2011-Today Serpent Consulting Services Pvt. Ltd.
 #                         (<http://www.serpentcs.com>)
+# Copyright (C) 2015-Today Diagram Software, S.L.
+#                         (<http://www.diagram.es>)
 #
 # WARNING: This program as such is intended to be used by professional
 # programmers who take the whole responsability of assessing all potential
@@ -36,22 +38,56 @@ import openerp
 import tempfile
 import logging
 import os
+import time
+
 from openerp import release, tools, report, pooler, models
 from . JasperReports.BrowseDataGenerator import CsvBrowseDataGenerator
 from . JasperReports.JasperServer import JasperServer
 from . JasperReports.RecordDataGenerator import CsvRecordDataGenerator
 from . JasperReports.JasperReport import JasperReport
 
+_logger = logging.getLogger(__name__)
+
+
+def _assert_dir(d):
+    if not os.path.exists(d):
+        os.makedirs(d, 0o700)
+    assert os.access(d, os.W_OK), '%s: directory is not writable' % (d)
+    return d
+
+
+def jasper_data_dir():
+    """ Get -or create- the Jasper Reports' data dir. """
+    d = os.path.join(tools.config['data_dir'], 'jasper_reports', release.series)
+    return _assert_dir(d)
+
+
+def get_file_path(*args):
+    """ All args will be treated as folders except the last one. """
+    d = os.path.join(tools.config['jasperdata'], *args[:-1])
+    return os.path.join(_assert_dir(d), args[-1])
+
+
 # Determines the port where the JasperServer process should listen
 # with its XML-RPC server for incomming calls
 tools.config['jasperport'] = tools.config.get('jasperport', 8090)
 
+# Determines where whill be stored all the JasperReports' data
+tools.config['jasperdata'] = tools.config.get('jasperdata', jasper_data_dir())
+
 # Determines the file name where the process ID of the
 # JasperServer process should be stored
-tools.config['jasperpid'] = tools.config.get('jasperpid', 'openerp-jasper.pid')
+tools.config['jasperpid'] = tools.config.get('jasperpid', os.path.join(
+    tools.config['jasperdata'], 'openerp-jasper.pid'))
 
 # Determines if temporary files will be removed
 tools.config['jasperunlink'] = tools.config.get('jasperunlink', True)
+
+_logger.info('Initalizing JasperReports...')
+_logger.info('Port: %s', tools.config['jasperport'])
+_logger.info('Data: %s', tools.config['jasperdata'])
+_logger.info('Pidfile: %s', tools.config['jasperpid'])
+_logger.info('Remove temporary files: %s', tools.config['jasperunlink'])
 
 
 class Report:
@@ -76,8 +112,6 @@ class Report:
         If self.context contains "return_pages = True" it will return
         the number of pages of the generated report.
         """
-        logger = logging.getLogger(__name__)
-
         # * Get report path *
         # Not only do we search the report by name but also ensure that
         # 'report_rml' field has the '.jrxml' postfix. This is needed because
@@ -103,7 +137,7 @@ class Report:
             self.reportPath = self.addonsPath(path=data['report_rml'])
 
         # Get report information from the jrxml file
-        logger.info("Requested report: '%s'" % self.reportPath)
+        _logger.info("Requested report: '%s'" % self.reportPath)
         self.report = JasperReport(self.reportPath)
 
         # Create temporary input (XML) and output (PDF) files
@@ -113,9 +147,8 @@ class Report:
         os.close(fd)
         self.temporaryFiles.append(dataFile)
         self.temporaryFiles.append(outputFile)
-        logger.info("Temporary data file: '%s'" % dataFile)
+        _logger.info("Temporary data file: '%s'" % dataFile)
 
-        import time
         start = time.time()
 
         # If the language used is xpath create the xmlFile in dataFile.
@@ -141,7 +174,7 @@ class Report:
                 else:
                     message += 'without prefix '
                 message += 'for file %s' % subreportInfo['filename']
-                logger.info("%s" % message)
+                _logger.info("%s" % message)
 
                 fd, subreportDataFile = tempfile.mkstemp()
                 os.close(fd)
@@ -172,7 +205,7 @@ class Report:
         # PDF file in outputFile
         pages = self.executeReport(dataFile, outputFile, subreportDataFiles)
         elapsed = (time.time() - start) / 60
-        logger.info("ELAPSED: %f" % elapsed)
+        _logger.info("ELAPSED: %f" % elapsed)
 
         # Read data from the generated file and return it
         f = open(outputFile, 'rb')
@@ -187,7 +220,7 @@ class Report:
                 try:
                     os.unlink(file)
                 except os.error:
-                    logger.warning("Could not remove file '%s'." % file)
+                    _logger.warning("Could not remove file '%s'." % file)
         self.temporaryFiles = []
 
         if self.context.get('return_pages'):

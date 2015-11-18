@@ -33,45 +33,73 @@
 
 import os
 import base64
-from . import jasper_report
-from openerp.exceptions import except_orm
-from openerp import models, fields, api, _
 import unicodedata
 from xml.dom.minidom import getDOMImplementation
+import logging
+
+from . import jasper_report
+from jasper_report import get_file_path
+
+from openerp.exceptions import except_orm
+from openerp import api, exceptions, fields, models, _
 
 src_chars = """ '"()/*-+?¿!&$[]{}@#`'^:;<>=~%,\\"""
 src_chars = unicode(src_chars, 'iso-8859-1')
 dst_chars = """________________________________"""
 dst_chars = unicode(dst_chars, 'iso-8859-1')
 
+_logger = logging.getLogger(__name__)
+
 
 class report_xml_file(models.Model):
     _name = 'ir.actions.report.xml.file'
 
-    file = fields.Binary('File', required=True,
-                         filters="*.jrxml,*.properties,*.ttf",)
+    file = fields.Binary('File')
     filename = fields.Char('File Name', size=256)
-    report_id = fields.Many2one('ir.actions.report.xml', 'Report',
-                                ondelete='cascade')
+    filepath = fields.Char('File Path', size=256, readonly=True)
+    report_id = fields.Many2one(
+        'ir.actions.report.xml', 'Report', ondelete='cascade')
     default = fields.Boolean('Default')
 
     @api.model
     def create(self, vals):
-        result = super(report_xml_file, self).create(vals)
-        ir_actions_report_obj = self.env['ir.actions.report.xml'
-                                         ].browse(vals['report_id'])
-        ir_actions_report_obj.update()
-        return result
+        folder = '.files' if not vals['filename'].endswith('.jrxml') \
+            else self.env.cr.dbname
+        vals['filepath'] = get_file_path(folder, vals['filename'])
+
+        # Avoid storing file in DB
+        res = super(report_xml_file, self).create(dict(vals, file=''))
+
+        if os.path.exists(vals['filepath']):
+            raise exceptions.Warning(
+                _('The file %r already exists.' % (vals['filepath'])))
+
+        with open(vals['filepath'], 'wb+') as f:
+            f.write(base64.decodestring(vals['file']))
+        _logger.info('Stored %s', vals['filepath'])
+
+        if self.default:
+            self.report_id.update()
+
+        return res
 
     @api.multi
     def write(self, vals):
-        result = super(report_xml_file, self).write(vals)
-        for attachment in self:
-            ir_actions_report_obj = self.env['ir.actions.report.xml'
-                                             ].browse([attachment.report_id.id
-                                                       ])
-            ir_actions_report_obj.update()
-        return result
+        # Avoid modifying file-related values
+        vals.pop('file', None)
+        vals.pop('filepath', None)
+        vals.pop('filename', None)
+        res = super(report_xml_file, self).write(vals)
+        self.mapped('report_id').update()
+        return res
+
+    @api.multi
+    def unlink(self):
+        for rec in self:
+            if os.path.exists(rec.filepath):
+                os.remove(rec.filepath)
+                _logger.info('Removed %s', rec.filepath)
+        return super(report_xml_file, self).unlink()
 
 
 # Inherit ir.actions.report.xml and add an action to be able to store
@@ -80,21 +108,20 @@ class report_xml_file(models.Model):
 class report_xml(models.Model):
     _inherit = 'ir.actions.report.xml'
 
-    jasper_output = fields.Selection([('html', 'HTML'), ('csv', 'CSV'),
-                                      ('xls', 'XLS'), ('rtf', 'RTF'),
-                                      ('odt', 'ODT'), ('ods', 'ODS'),
-                                      ('txt', 'Text'), ('pdf', 'PDF')],
-                                     'Jasper Output', default='pdf')
-    jasper_file_ids = fields.One2many('ir.actions.report.xml.file',
-                                      'report_id', 'Files', help='')
+    jasper_output = fields.Selection([
+        ('html', 'HTML'), ('csv', 'CSV'), ('xls', 'XLS'), ('rtf', 'RTF'),
+        ('odt', 'ODT'), ('ods', 'ODS'), ('txt', 'Text'), ('pdf', 'PDF')
+    ], 'Jasper Output', default='pdf')
+    jasper_file_ids = fields.One2many(
+        'ir.actions.report.xml.file', 'report_id', 'Files', help='')
     jasper_model_id = fields.Many2one('ir.model', 'Model', help='')
     jasper_report = fields.Boolean('Is Jasper Report?')
 
     @api.model
     def create(self, vals):
-        if self._context and self._context.get('jasper_report'):
-            vals['model'] = self.env['ir.model'
-                                     ].browse(vals['jasper_model_id']).model
+        if self.env.context.get('jasper_report'):
+            IrModel = self.env['ir.model']
+            vals['model'] = IrModel.browse(vals['jasper_model_id']).model
             vals['type'] = 'ir.actions.report.xml'
             vals['report_type'] = 'pdf'
             vals['jasper_report'] = True
@@ -102,11 +129,10 @@ class report_xml(models.Model):
 
     @api.multi
     def write(self, vals):
-        if self._context and self._context.get('jasper_report'):
+        if self.env.context.get('jasper_report'):
+            IrModel = self.env['ir.model']
             if 'jasper_model_id' in vals:
-                vals['model'] = self.env['ir.model'
-                                         ].browse(vals['jasper_model_id'
-                                                       ]).model
+                vals['model'] = IrModel.browse(vals['jasper_model_id']).model
             vals['type'] = 'ir.actions.report.xml'
             vals['report_type'] = 'pdf'
             vals['jasper_report'] = True
@@ -114,69 +140,47 @@ class report_xml(models.Model):
 
     @api.multi
     def update(self):
-        if self._context is None:
-            self._context = {}
-        pool_values = self.env['ir.values']
+        IrValues = self.env['ir.values']
         for report in self:
-            has_default = False
             # Browse attachments and store .jrxml and .properties
-            # into jasper_reports/custom_reportsdirectory. Also add
+            # into jasper_reports/custom_reports directory. Also add
             # or update ir.values data so they're shown on model views.for
             # attachment in self.env['ir.attachment'].browse(attachmentIds)
-            for attachment in report.jasper_file_ids:
-                content = attachment.file
-                fileName = attachment.filename
-                if not fileName or not content:
-                    continue
-                path = self.save_file(fileName, content)
-                if '.jrxml' in fileName:
-                    if attachment.default:
-                        if has_default:
-                            raise except_orm(_('Error'),
-                                             _('There is more than one \
-                                             report marked as default'))
-                        has_default = True
-                        # Update path into report_rml field.
-                        my_obj = self.browse([report.id])
-                        my_obj.write({'report_rml': path})
-                        ser_arg = [('value', '=',
-                                    'ir.actions.report.xml,%s' % report.id)]
-                        valuesId = pool_values.search(ser_arg)
-                        data = {
-                            'name': report.name,
-                            'model': report.model,
-                            'key': 'action',
-                            'object': True,
-                            'key2': 'client_print_multi',
-                            'value': 'ir.actions.report.xml,%s' % report.id
-                        }
-                        if not valuesId.ids:
-                            valuesId = pool_values.create(data)
-                        else:
-                            for pool_obj in pool_values.browse(valuesId.ids):
-                                pool_obj.write(data)
-                                valuesId = valuesId[0]
+            main_attachment = report.jasper_file_ids.filtered(
+                lambda r: r.default and r.filename.endswith('.jrxml'))
 
-            if not has_default:
-                raise except_orm(_('Error'),
-                                 _('No report has been marked as default! \
-                                 You need atleast one jrxml report!'))
+            if not main_attachment:
+                raise exceptions.Warning(
+                    _('No report has been marked as default! You need '
+                      'atleast one jrxml report!'))
+            elif len(main_attachment) > 1:
+                raise exceptions.Warning(
+                    _('There is more than one report marked as default'))
+
+            # Update path into report_rml field.
+            report.report_rml = main_attachment.filepath
+            report_ref = 'ir.actions.report.xml,%s' % (report.id,)
+
+            values = IrValues.search([('value', '=', report_ref)])
+            data = {
+                'name': report.name,
+                'model': report.model,
+                'key': 'action',
+                'object': True,
+                'key2': 'client_print_multi',
+                'value': report_ref
+            }
+
+            if not values:
+                values = IrValues.create(data)
+            else:
+                for value in values:
+                    value.write(data)
 
             # Ensure the report is registered so it can be used immediately
-            jasper_report.register_jasper_report(report.report_name,
-                                                 report.model)
+            jasper_report.register_jasper_report(
+                report.report_name, report.model)
         return True
-
-    def save_file(self, name, value):
-        path = os.path.abspath(os.path.dirname(__file__))
-        path += '/custom_reports/%s' % name
-        f = open(path, 'wb+')
-        try:
-            f.write(base64.decodestring(value))
-        finally:
-            f.close()
-        path = 'jasper_reports/custom_reports/%s' % name
-        return path
 
     def normalize(self, text):
         if isinstance(text, unicode):
@@ -194,9 +198,6 @@ class report_xml(models.Model):
         output = unicodedata.normalize('NFKD', output).encode('ASCII',
                                                               'ignore')
         output = output.strip('_').encode('utf-8')
-        # If the first char is not alpha, prepend "_"
-        if not output[:1].isalpha():
-            output = '_' + output
         return output
 
     @api.model
@@ -242,6 +243,10 @@ class report_xml(models.Model):
                 name = '%s-%s' % (self.unaccent(name), field)
             else:
                 name = field
+            # If the first char is not alpha, prepend "_"
+            if not name[:1].isalpha():
+                name = '_' + name
+
             fieldNode = document.createElement(name)
 
             parentNode.appendChild(fieldNode)

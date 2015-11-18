@@ -1,3 +1,43 @@
+##########################
+#Linux Specific GitIgnore#
+##########################
+.*
+!.gitignore
+*~
+*.sw[a-p]
+ 
+# KDE
+.directory
+
+############################
+#Eclipse Specific GitIgnore#
+############################
+*.pydevproject
+.project
+.metadata
+bin/**
+tmp/**
+tmp/**/*
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+.classpath
+.settings/
+.loadpath
+*.pyc
+*.jasper
+*.log*
+ 
+# CDT-specific
+.cproject
+*.*~
+*.md~
+
+########
+#Others#
+########
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -36,8 +76,6 @@ coverage.xml
 
 # Mr Developer
 .mr.developer.cfg
-.project
-.pydevproject
 
 # Rope
 .ropeproject
@@ -48,3 +86,8 @@ docs/_build/
 # Backup files
 *~
 *.swp
+
+# Log files
+*.log
+jasper_reports/java/jasperserver.log
+
