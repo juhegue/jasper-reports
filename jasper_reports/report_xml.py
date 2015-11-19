@@ -40,7 +40,6 @@ import logging
 from . import jasper_report
 from jasper_report import get_file_path
 
-from openerp.exceptions import except_orm
 from openerp import api, exceptions, fields, models, _
 
 src_chars = """ '"()/*-+?¿!&$[]{}@#`'^:;<>=~%,\\"""
@@ -71,8 +70,10 @@ class report_xml_file(models.Model):
         res = super(report_xml_file, self).create(dict(vals, file=''))
 
         if os.path.exists(vals['filepath']):
-            raise exceptions.Warning(
-                _('The file %r already exists.' % (vals['filepath'])))
+            # raise exceptions.Warning(
+            #     _('The file %s already exists.' % (vals['filepath'])))
+            _logger.warning(
+                _('The file %s is being replaced.' % (vals['filepath'])))
 
         with open(vals['filepath'], 'wb+') as f:
             f.write(base64.decodestring(vals['file']))
