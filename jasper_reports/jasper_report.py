@@ -51,14 +51,56 @@ import logging
 
 from JasperReports import *
 
+_logger = logging.getLogger(__name__)
+
+MODULE_DIR = os.path.abspath(os.path.dirname(__file__))
+
 # Determines the port where the JasperServer process should listen with its XML-RPC server for incomming calls
 tools.config['jasperport'] = tools.config.get('jasperport', 8090)
 
 # Determines the file name where the process ID of the JasperServer process should be stored
-tools.config['jasperpid'] = tools.config.get('jasperpid', 'openerp-jasper.pid')
+tools.config['jasperpid'] = tools.config.get(
+    'jasperpid', os.path.join(MODULE_DIR, 'openerp-jasper.pid'))
 
 # Determines if temporary files will be removed
 tools.config['jasperunlink'] = tools.config.get('jasperunlink', True)
+
+# Determines where to store the report files. As there is no known path with write permissions
+# -unlike Odoo 8.0, that relies on having a $HOME dir-, the 'custom_reports' dir will be replaced
+# with a symlink to '/usr/local/etc/jasper_reports', configurable through the param 'jasperdata'.
+# This way, it won't be replaced in case of update.
+# /!\ The path must be almost certainly created by an admin user.
+tools.config['jasperdata'] = path = os.path.abspath(tools.config.get(
+    'jasperdata', os.path.join(os.path.sep, 'usr', 'local', 'etc', 'jasper_reports')))
+
+sympath = os.path.abspath(os.path.join(os.path.dirname(__file__), 'custom_reports'))
+
+if not os.path.exists(path):
+    try:
+        perms = 0o755
+        os.mkdir(path, perms)
+    except OSError as e:
+        _logger.warning('Unable to create path %s with permissions %o: %s', path, perms, e)
+elif not os.path.isdir(path):
+    _logger.warning('The path %s can not be a file!', path)
+elif not os.access(path, os.W_OK | os.X_OK):
+    _logger.warning('The directory %s is not writable!', path)
+elif not os.path.exists(sympath):
+    try:
+        os.symlink(path, sympath)
+    except OSError as e:
+        _logger.warning('Unable to create the symbolic link "%s => %s": %s', sympath, path, e)
+elif not os.path.islink(sympath):
+    if not os.listdir(sympath):
+        os.rmdir(sympath)
+        try:
+            os.symlink(path, sympath)
+        except OSError as e:
+            _logger.warning('Unable to create the symbolic link "%s => %s": %s', sympath, path, e)
+    else:
+        _logger.warning('The path %s is not a symlink and is not empty! Please, move all content '
+                        'to %s or it will be erased after the next update.', sympath, path)
+
 
 class Report:
     def __init__(self, name, cr, uid, ids, data, context):
@@ -180,7 +222,7 @@ class Report:
             return ( data, self.outputFormat )
 
     def path(self):
-        return os.path.abspath(os.path.dirname(__file__))
+        return MODULE_DIR
 
     def addonsPath(self, path=False):
         if path:
