@@ -54,6 +54,8 @@ from JasperReports import *
 _logger = logging.getLogger(__name__)
 
 MODULE_DIR = os.path.abspath(os.path.dirname(__file__))
+DEFAULT_DATA_DIR = os.path.expanduser(os.path.join(
+    '~', '.local', 'share', 'Odoo', 'jasper_reports', '7.0'))
 
 # Determines the port where the JasperServer process should listen with its XML-RPC server for incomming calls
 tools.config['jasperport'] = tools.config.get('jasperport', 8090)
@@ -65,41 +67,44 @@ tools.config['jasperpid'] = tools.config.get(
 # Determines if temporary files will be removed
 tools.config['jasperunlink'] = tools.config.get('jasperunlink', True)
 
-# Determines where to store the report files. As there is no known path with write permissions
-# -unlike Odoo 8.0, that relies on having a $HOME dir-, the 'custom_reports' dir will be replaced
-# with a symlink to '/usr/local/etc/jasper_reports', configurable through the param 'jasperdata'.
-# This way, it won't be replaced in case of update.
-# /!\ The path must be almost certainly created by an admin user.
-tools.config['jasperdata'] = path = os.path.abspath(tools.config.get(
-    'jasperdata', os.path.join(os.path.sep, 'usr', 'local', 'etc', 'jasper_reports')))
+# Determines where to store the report files. As the 'custom_reports' dir will be replaced in case
+# of update, the files will be be stored in the path configured through the 'jasperdata' parameter,
+# or in '~/.local/share/Odoo/jasper_reports/7.0' by default.
+# /!\ Unlike Odoo 8.0, that relies on having a $HOME dir, OpenERP 7.0 might not have one, so the
+# path must be almost certainly created by an admin user.
+tools.config['jasperdata'] = path = os.path.abspath(
+    tools.config.get('jasperdata', DEFAULT_DATA_DIR))
 
-sympath = os.path.abspath(os.path.join(os.path.dirname(__file__), 'custom_reports'))
+symlink = os.path.abspath(os.path.join(os.path.dirname(__file__), 'custom_reports'))
 
+# Ensure that the new path exists.
 if not os.path.exists(path):
     try:
         perms = 0o755
-        os.mkdir(path, perms)
+        os.makedirs(path, perms)
     except OSError as e:
         _logger.warning('Unable to create path %s with permissions %o: %s', path, perms, e)
-elif not os.path.isdir(path):
+
+# Create symlink only if the path exists and is writable
+if not os.path.isdir(path):
     _logger.warning('The path %s can not be a file!', path)
 elif not os.access(path, os.W_OK | os.X_OK):
     _logger.warning('The directory %s is not writable!', path)
-elif not os.path.exists(sympath):
+elif not os.path.exists(symlink):
     try:
-        os.symlink(path, sympath)
+        os.symlink(path, symlink)
     except OSError as e:
-        _logger.warning('Unable to create the symbolic link "%s => %s": %s', sympath, path, e)
-elif not os.path.islink(sympath):
-    if not os.listdir(sympath):
-        os.rmdir(sympath)
+        _logger.warning('Unable to create the symbolic link "%s => %s": %s', symlink, path, e)
+elif not os.path.islink(symlink):
+    if not os.listdir(symlink):
+        os.rmdir(symlink)
         try:
-            os.symlink(path, sympath)
+            os.symlink(path, symlink)
         except OSError as e:
-            _logger.warning('Unable to create the symbolic link "%s => %s": %s', sympath, path, e)
+            _logger.warning('Unable to create the symbolic link "%s => %s": %s', symlink, path, e)
     else:
         _logger.warning('The path %s is not a symlink and is not empty! Please, move all content '
-                        'to %s or it will be erased after the next update.', sympath, path)
+                        'to %s or it will be erased after the next update.', symlink, path)
 
 
 class Report:
