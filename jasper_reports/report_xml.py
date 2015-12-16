@@ -226,9 +226,8 @@ class report_xml(models.Model):
             name = False
             if language:
                 # Obtain field string for user's language.
-                name = pool.get('ir.translation'
-                                )._get_source(modelName + ',' + field,
-                                              'field', language)
+                name = pool.get('ir.translation')._get_source(
+                    self.env.cr, self.env.uid, '%s,%s' % (modelName, field), 'field', language)
             if not name:
                 # If there's not description in user's language,
                 # use default (english) one.
