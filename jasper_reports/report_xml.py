@@ -79,17 +79,16 @@ class report_xml_file(models.Model):
             f.write(base64.decodestring(vals['file']))
         _logger.info('Stored %s', vals['filepath'])
 
-        if self.default:
-            self.report_id.update()
+        if res.default:
+            res.report_id.update()
 
         return res
 
     @api.multi
     def write(self, vals):
         # Avoid modifying file-related values
-        vals.pop('file', None)
-        vals.pop('filepath', None)
-        vals.pop('filename', None)
+        for key in ['file', 'filepath', 'filename']:
+            vals.pop(key, None)
         res = super(report_xml_file, self).write(vals)
         self.mapped('report_id').update()
         return res
@@ -117,49 +116,62 @@ class report_xml(models.Model):
         'ir.actions.report.xml.file', 'report_id', 'Files', help='')
     jasper_model_id = fields.Many2one('ir.model', 'Model', help='')
     jasper_report = fields.Boolean('Is Jasper Report?')
+    jasper_main_file_id = fields.Many2one(
+        'ir.actions.report.xml.file', 'Main File', compute='_compute_jasper_main_file_id')
+
+    @api.multi
+    @api.depends('jasper_file_ids', 'jasper_file_ids.default')
+    def _compute_jasper_main_file_id(self):
+        for rec in self:
+            rec.jasper_main_file_id = rec.jasper_file_ids.filtered(
+                lambda r: r.default and r.filename.endswith('.jrxml'))[:1]
+
+    def _get_default_vals(self, jasper_model_id=False):
+        res = {}
+        if jasper_model_id:
+            res['model'] = self.env['ir.model'].browse(jasper_model_id).model
+        res['type'] = 'ir.actions.report.xml'
+        res['report_type'] = 'pdf'
+        res['jasper_report'] = True
+        return res
 
     @api.model
     def create(self, vals):
         if self.env.context.get('jasper_report'):
-            IrModel = self.env['ir.model']
-            vals['model'] = IrModel.browse(vals['jasper_model_id']).model
-            vals['type'] = 'ir.actions.report.xml'
-            vals['report_type'] = 'pdf'
-            vals['jasper_report'] = True
+            vals.update(self._get_default_vals(vals.get('jasper_model_id')))
         return super(report_xml, self).create(vals)
 
     @api.multi
     def write(self, vals):
         if self.env.context.get('jasper_report'):
-            IrModel = self.env['ir.model']
-            if 'jasper_model_id' in vals:
-                vals['model'] = IrModel.browse(vals['jasper_model_id']).model
-            vals['type'] = 'ir.actions.report.xml'
-            vals['report_type'] = 'pdf'
-            vals['jasper_report'] = True
-        return super(report_xml, self).write(vals)
+            vals.update(self._get_default_vals(vals.get('jasper_model_id')))
+        # Avoid infinite loop when updating 'report_rml' value in `update()`.
+        res = super(report_xml, self).write(vals)
+        if res and not self.env.context.get('jasper_update'):
+            self.with_context(jasper_update_silent=True).update()
+        return res
 
     @api.multi
     def update(self):
         IrValues = self.env['ir.values']
         for report in self:
+            report = report.with_context(jasper_update=True)
             # Browse attachments and store .jrxml and .properties
             # into jasper_reports/custom_reports directory. Also add
             # or update ir.values data so they're shown on model views.for
             # attachment in self.env['ir.attachment'].browse(attachmentIds)
-            main_attachment = report.jasper_file_ids.filtered(
-                lambda r: r.default and r.filename.endswith('.jrxml'))
-
-            if not main_attachment:
+            if not report.jasper_main_file_id:
+                if self.env.context.get('jasper_update_silent'):
+                    continue
                 raise exceptions.Warning(
                     _('No report has been marked as default! You need '
                       'atleast one jrxml report!'))
-            elif len(main_attachment) > 1:
+            elif len(report.jasper_main_file_id) > 1:
                 raise exceptions.Warning(
                     _('There is more than one report marked as default'))
 
             # Update path into report_rml field.
-            report.report_rml = main_attachment.filepath
+            report.report_rml = report.jasper_main_file_id.filepath
             report_ref = 'ir.actions.report.xml,%s' % (report.id,)
 
             values = IrValues.search([('value', '=', report_ref)])
