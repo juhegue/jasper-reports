@@ -53,32 +53,53 @@ _logger = logging.getLogger(__name__)
 class report_xml_file(models.Model):
     _name = 'ir.actions.report.xml.file'
 
-    file = fields.Binary('File')
-    filename = fields.Char('File Name', size=256)
+    file = fields.Binary('File', compute='_compute_file', inverse='_inverse_file')
+    filename = fields.Char('File Name', size=256, required=True)
     filepath = fields.Char('File Path', size=256, readonly=True)
     report_id = fields.Many2one(
         'ir.actions.report.xml', 'Report', ondelete='cascade')
     default = fields.Boolean('Default')
 
+    @api.multi
+    def _compute_file(self):
+        for rec in self:
+            rec.file = ''
+
+            if rec.filepath and os.path.isfile(rec.filepath):
+                try:
+                    with open(rec.filepath, 'rb') as f:
+                        rec.file = f.read().encode('base64')
+                except Exception as e:
+                    _logger.exception('report_xml_file: unable to read %s: %s', rec.filepath, e)
+
+    @api.multi
+    def _inverse_file(self):
+        dbname = self.env.cr.dbname
+        is_tmpl = lambda r: (r.filename or '').lower().endswith('.jrxml')
+
+        for rec in self:
+            old_filepath = rec.filepath
+            rec.filepath = ''
+
+            if rec.file and rec.filename:
+                rec.filepath = get_file_path(dbname if is_tmpl(rec) else '.files', rec.filename)
+                with open(rec.filepath, 'wb+') as f:
+                    f.write(base64.decodestring(rec.file))
+                state = 'created' if rec.filepath != old_filepath else 'updated'
+                _logger.info('report_xml_file: %s file %s', state, rec.filepath)
+
+            if old_filepath and rec.filepath != old_filepath and os.path.isfile(old_filepath):
+                try:
+                    os.unlink(old_filepath)
+                    _logger.info('report_xml_file: unlinked obsolete file %s', old_filepath)
+                except OSError:
+                    _logger.exception('report_xml_file: unable to unlink %s', old_filepath)
+
     @api.model
     def create(self, vals):
-        folder = '.files' if not vals['filename'].endswith('.jrxml') \
-            else self.env.cr.dbname
-        vals['filepath'] = get_file_path(folder, vals['filename'])
+        res = super(report_xml_file, self).create(vals)
 
-        # Avoid storing file in DB
-        res = super(report_xml_file, self).create(dict(vals, file=''))
-
-        if os.path.exists(vals['filepath']):
-            # raise exceptions.Warning(
-            #     _('The file %s already exists.' % (vals['filepath'])))
-            _logger.warning(
-                _('The file %s is being replaced.' % (vals['filepath'])))
-
-        with open(vals['filepath'], 'wb+') as f:
-            f.write(base64.decodestring(vals['file']))
-        _logger.info('Stored %s', vals['filepath'])
-
+        # Update parent report, its default file has changed
         if res.default:
             res.report_id.update()
 
@@ -86,19 +107,20 @@ class report_xml_file(models.Model):
 
     @api.multi
     def write(self, vals):
-        # Avoid modifying file-related values
-        for key in ['file', 'filepath', 'filename']:
-            vals.pop(key, None)
         res = super(report_xml_file, self).write(vals)
-        self.mapped('report_id').update()
+
+        # Update parent reports, their default file might have changed
+        for rec in self:
+            rec.report_id.update()
+
         return res
 
     @api.multi
     def unlink(self):
         for rec in self:
-            if os.path.exists(rec.filepath):
-                os.remove(rec.filepath)
-                _logger.info('Removed %s', rec.filepath)
+            if rec.filepath and os.path.exists(rec.filepath):
+                os.unlink(rec.filepath)
+                _logger.info('report_xml_file: unlinked file %s', rec.filepath)
         return super(report_xml_file, self).unlink()
 
 
@@ -179,7 +201,6 @@ class report_xml(models.Model):
                 'name': report.name,
                 'model': report.model,
                 'key': 'action',
-                'object': True,
                 'key2': 'client_print_multi',
                 'value': report_ref
             }

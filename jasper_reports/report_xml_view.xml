@@ -20,9 +20,9 @@
 			<field name="arch" type="xml">
 				<form string="Jasper Reports File">
 					<group>
-						<field name="id" invisible="1"/>
-						<field name="file" filename="filename" attrs="{'readonly': [('id', '!=', False)]}" />
-						<field name="filename" attrs="{'readonly': [('id', '!=', False)]}" />
+						<field name="id" invisible="1" />
+						<field name="filename" invisible="1" />
+						<field name="file" filename="filename" />
 						<field name="default" />
 					</group>
 				</form>
