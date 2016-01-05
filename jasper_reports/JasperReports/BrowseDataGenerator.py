@@ -131,8 +131,6 @@ class BrowseDataGenerator(AbstractDataGenerator):
                     value = record.id
                 elif hasattr(record, root):
                     value = getattr(record, root)
-                    if isinstance(value, orm.Model):
-                        value = [x for x in value]
                 else:
                     warng = "Field '%s' does not exist in model '%s'."
                     self.warning(warng % (root, record._name))
