@@ -32,8 +32,9 @@
 			<field name="name">ir.actions.report.jasper.file.tree</field>
 			<field name="model">ir.actions.report.xml.file</field>
 			<field name="arch" type="xml">
-				<tree string="Jasper Reports File">
-					<field name="filename" />
+				<tree string="Jasper Reports File" editable="bottom">
+					<field name="filename" invisible="1" />
+					<field name="file" filename="filename" />
 					<field name="default" />
 				</tree>
 			</field>
@@ -56,11 +57,19 @@
 						<field name="attachment" />
 						<field name="attachment_use" />
 					</group>
-					<group colspan="4">
-						<separator string="Files" colspan="4" />
-						<field name="jasper_file_ids" colspan="4" nolabel="1"/>
-						<separator string="Groups" colspan="4" />
-						<field name="groups_id" colspan="4" nolabel="1" />
+					<group name="files" string="Files">
+						<field name="jasper_file_ids" nolabel="1"/>
+					</group>
+					<group name="groups" string="Groups">
+						<field name="groups_id" nolabel="1" />
+					</group>
+					<group name="all_files" string="Other Files">
+						<field name="all_jasper_file_ids" nolabel="1">
+							<tree editable="bottom">
+								<field name="filename" invisible="1" />
+								<field name="file" filename="filename" />
+							</tree>
+						</field>
 					</group>
 				</form>
 			</field>

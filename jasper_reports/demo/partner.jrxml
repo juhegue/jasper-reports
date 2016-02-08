@@ -2,10 +2,10 @@
 <jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="report name" language="groovy" pageWidth="595" pageHeight="842" columnWidth="535" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20">
 	<property name="OPENERP_RELATIONS" value="[&apos;Attachments&apos;]"/>
 	<parameter name="STANDARD_DIR" class="java.lang.String" isForPrompting="false">
-		<defaultValueExpression><![CDATA["/home/albert/d/koo/server-modules/jasper_reports/report/"]]></defaultValueExpression>
+		<defaultValueExpression><![CDATA["./"]]></defaultValueExpression>
 	</parameter>
 	<parameter name="SUBREPORT_DIR" class="java.lang.String" isForPrompting="false">
-		<defaultValueExpression><![CDATA["/home/albert/d/git/nan-openerp/openobject-client-kde-5.0/server-modules/jasper_reports/demo/"]]></defaultValueExpression>
+		<defaultValueExpression><![CDATA["./"]]></defaultValueExpression>
 	</parameter>
 	<parameter name="EVENTS_DATA_SOURCE" class="java.lang.Object"/>
 	<queryString language="xPath">
@@ -168,20 +168,20 @@
 				<dataSourceExpression><![CDATA[$P{REPORT_DATA_SOURCE}]]></dataSourceExpression>
 				<subreportExpression class="java.lang.String"><![CDATA[$P{STANDARD_DIR} + "report_header.jasper"]]></subreportExpression>
 			</subreport>
-			<textField>
+			<!-- <textField>
 				<reportElement x="0" y="84" width="555" height="20"/>
 				<textElement textAlignment="Center">
 					<font size="16" isBold="true"/>
 				</textElement>
 				<textFieldExpression class="java.lang.String"><![CDATA[tr("TESTING TRANSLATED TEXTS")]]></textFieldExpression>
-			</textField>
-			<textField>
+			</textField> -->
+			<!-- <textField>
 				<reportElement x="0" y="104" width="555" height="20"/>
 				<textElement textAlignment="Center">
 					<font size="16" isBold="true"/>
 				</textElement>
 				<textFieldExpression class="java.lang.String"><![CDATA[tr(new Locale("es","ES"), "SECOND LOCALE TEST {0}", 1)]]></textFieldExpression>
-			</textField>
+			</textField> -->
 		</band>
 	</title>
 	<pageHeader>

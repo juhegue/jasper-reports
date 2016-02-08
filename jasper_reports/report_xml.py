@@ -32,13 +32,14 @@
 ##############################################################################
 
 import os
+import re
 import base64
 import unicodedata
 from xml.dom.minidom import getDOMImplementation
 import logging
 
 from . import jasper_report
-from jasper_report import get_file_path
+from jasper_report import jasper_reports_file
 
 from openerp import api, exceptions, fields, models, _
 
@@ -48,17 +49,23 @@ dst_chars = """________________________________"""
 dst_chars = unicode(dst_chars, 'iso-8859-1')
 
 _logger = logging.getLogger(__name__)
+slash_free_pattern = re.compile(r'^[^/\\\\~]+$')
 
 
-class report_xml_file(models.Model):
+class IrActionsReportXmlFile(models.Model):
     _name = 'ir.actions.report.xml.file'
+    _order = 'filename asc'
 
     file = fields.Binary('File', compute='_compute_file', inverse='_inverse_file')
     filename = fields.Char('File Name', size=256, required=True)
-    filepath = fields.Char('File Path', size=256, readonly=True)
+    filepath = fields.Char('File Path', size=256, compute='_compute_filepath')
     report_id = fields.Many2one(
         'ir.actions.report.xml', 'Report', ondelete='cascade')
     default = fields.Boolean('Default')
+
+    _sql_constraints = [
+        ('name_uniq', 'unique(filename)', 'The file name must be unique')
+    ]
 
     @api.multi
     def _compute_file(self):
@@ -70,34 +77,32 @@ class report_xml_file(models.Model):
                     with open(rec.filepath, 'rb') as f:
                         rec.file = f.read().encode('base64')
                 except Exception as e:
-                    _logger.exception('report_xml_file: unable to read %s: %s', rec.filepath, e)
+                    _logger.exception('Unable to read %s: %s', rec.filepath, e)
+
+    @api.multi
+    @api.depends('filename')
+    def _compute_filepath(self):
+        for rec in self:
+            if rec.filename:
+                # Ensure that the given file name cannot cheat the FS
+                if not slash_free_pattern.match(rec.filename):
+                    raise exceptions.ValidationError(_(
+                        'The file name cannot contain slashes (/) nor '
+                        'backslashes (\\): %s') % (rec.filename,))
+
+                rec.filepath = jasper_reports_file(self.env.cr.dbname, rec.filename)
 
     @api.multi
     def _inverse_file(self):
-        dbname = self.env.cr.dbname
-        is_tmpl = lambda r: (r.filename or '').lower().endswith('.jrxml')
-
         for rec in self:
-            old_filepath = rec.filepath
-            rec.filepath = ''
-
             if rec.file and rec.filename:
-                rec.filepath = get_file_path(dbname if is_tmpl(rec) else '.files', rec.filename)
                 with open(rec.filepath, 'wb+') as f:
                     f.write(base64.decodestring(rec.file))
-                state = 'created' if rec.filepath != old_filepath else 'updated'
-                _logger.info('report_xml_file: %s file %s', state, rec.filepath)
-
-            if old_filepath and rec.filepath != old_filepath and os.path.isfile(old_filepath):
-                try:
-                    os.unlink(old_filepath)
-                    _logger.info('report_xml_file: unlinked obsolete file %s', old_filepath)
-                except OSError:
-                    _logger.exception('report_xml_file: unable to unlink %s', old_filepath)
+                _logger.info('Stored file %s', rec.filepath)
 
     @api.model
     def create(self, vals):
-        res = super(report_xml_file, self).create(vals)
+        res = super(IrActionsReportXmlFile, self).create(vals)
 
         # Update parent report, its default file has changed
         if res.default:
@@ -107,7 +112,10 @@ class report_xml_file(models.Model):
 
     @api.multi
     def write(self, vals):
-        res = super(report_xml_file, self).write(vals)
+        if 'filename' in vals and vals['filename'] != self.filename:
+            _logger.info('Deleting %s...', self.filepath)
+            os.unlink(self.filepath)
+        res = super(IrActionsReportXmlFile, self).write(vals)
 
         # Update parent reports, their default file might have changed
         for rec in self:
@@ -119,15 +127,15 @@ class report_xml_file(models.Model):
     def unlink(self):
         for rec in self:
             if rec.filepath and os.path.exists(rec.filepath):
+                _logger.info('Deleting %s...', self.filepath)
                 os.unlink(rec.filepath)
-                _logger.info('report_xml_file: unlinked file %s', rec.filepath)
-        return super(report_xml_file, self).unlink()
+        return super(IrActionsReportXmlFile, self).unlink()
 
 
 # Inherit ir.actions.report.xml and add an action to be able to store
 # .jrxml and .properties files attached to the report so they can be
 # used as reports in the application.
-class report_xml(models.Model):
+class IrActionsReportXml(models.Model):
     _inherit = 'ir.actions.report.xml'
 
     jasper_output = fields.Selection([
@@ -136,10 +144,14 @@ class report_xml(models.Model):
     ], 'Jasper Output', default='pdf')
     jasper_file_ids = fields.One2many(
         'ir.actions.report.xml.file', 'report_id', 'Files', help='')
+    all_jasper_file_ids = fields.One2many(
+        'ir.actions.report.xml.file', string='Other Files',
+        compute='_compute_all_jasper_file_ids')
     jasper_model_id = fields.Many2one('ir.model', 'Model', help='')
     jasper_report = fields.Boolean('Is Jasper Report?')
     jasper_main_file_id = fields.Many2one(
-        'ir.actions.report.xml.file', 'Main File', compute='_compute_jasper_main_file_id')
+        'ir.actions.report.xml.file', 'Main File',
+        compute='_compute_jasper_main_file_id')
 
     @api.multi
     @api.depends('jasper_file_ids', 'jasper_file_ids.default')
@@ -147,6 +159,14 @@ class report_xml(models.Model):
         for rec in self:
             rec.jasper_main_file_id = rec.jasper_file_ids.filtered(
                 lambda r: r.default and r.filename.endswith('.jrxml'))[:1]
+
+    @api.multi
+    @api.depends('jasper_file_ids')
+    def _compute_all_jasper_file_ids(self):
+        IrActionsReportXmlFile = self.env['ir.actions.report.xml.file']
+        for rec in self:
+            rec.all_jasper_file_ids = IrActionsReportXmlFile.search([
+                ('id', 'not in', rec.jasper_file_ids.ids)])
 
     def _get_default_vals(self, jasper_model_id=False):
         res = {}
@@ -161,14 +181,14 @@ class report_xml(models.Model):
     def create(self, vals):
         if self.env.context.get('jasper_report'):
             vals.update(self._get_default_vals(vals.get('jasper_model_id')))
-        return super(report_xml, self).create(vals)
+        return super(IrActionsReportXml, self).create(vals)
 
     @api.multi
     def write(self, vals):
         if self.env.context.get('jasper_report'):
             vals.update(self._get_default_vals(vals.get('jasper_model_id')))
         # Avoid infinite loop when updating 'report_rml' value in `update()`.
-        res = super(report_xml, self).write(vals)
+        res = super(IrActionsReportXml, self).write(vals)
         if res and not self.env.context.get('jasper_update'):
             self.with_context(jasper_update_silent=True).update()
         return res

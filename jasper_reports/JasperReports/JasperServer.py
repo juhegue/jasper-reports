@@ -33,14 +33,27 @@
 
 import os
 import time
+import errno
+import signal
 import socket
 import subprocess
 import xmlrpclib
 import logging
 
-from openerp import tools
+from openerp import modules, tools
 from openerp.exceptions import except_orm
 from openerp.tools.translate import _
+
+MODULE_PATH = modules.get_module_path('jasper_reports')
+JASPER_CWD = os.path.join(MODULE_PATH, 'java')
+
+
+def abslistdir(d):
+    """ Return child directories. """
+    for f in os.listdir(d):
+        res = os.path.join(d, f)
+        if os.path.isdir(res):
+            yield res
 
 
 class JasperServer:
@@ -50,6 +63,8 @@ class JasperServer:
         url = 'http://localhost:%d' % port
         self.proxy = xmlrpclib.ServerProxy(url, allow_none=True)
         self.logger = logging.getLogger(__name__)
+        self._classpath = self.build_classpath()
+        self.logger.debug('CLASSPATH=%s', self._classpath)
 
     def error(self, message):
         if self.logger:
@@ -61,17 +76,26 @@ class JasperServer:
     def setPidFile(self, pidfile):  # [DEPRECATED]
         self.pidfile = pidfile
 
+    def build_classpath(self):
+        """
+        Build the CLASSPATH variable. It consists of:
+            * jasper_reports/java: JasperReport's main folder
+            * jasper_reports/java/lib/*: Java libraries
+            * jasper_reports/custom_reports: Common report files
+            * <data_dir>/jasper_reports/<release>/<dbname>: DB report files
+        """
+        from openerp.addons.jasper_reports.jasper_report import jasper_reports_dir
+        classpath_separator = ';' if os.name == 'nt' else ':'
+        return classpath_separator.join([
+            JASPER_CWD,
+            os.path.join(JASPER_CWD, 'lib', '*'),
+            os.path.join(MODULE_PATH, 'custom_reports'),
+            # + DB directories
+        ] + [d for d in abslistdir(jasper_reports_dir())])
+
     def start(self):
         env = os.environ.copy()
-        cwd = os.path.join(self.path(), '..', 'java')
-        cp_separator = ';' if os.name == 'nt' else ':'
-
-        env['CLASSPATH'] = cp_separator.join([
-            cwd,
-            os.path.join(cwd, 'lib', '*'),
-            os.path.join(os.path.join(self.path(), '..', 'custom_reports')),
-            os.path.join(tools.config['jasperdata'], '.files'),
-        ])
+        env['CLASSPATH'] = self._classpath
 
         # Set headless = True because otherwise, java may use
         # existing X session and if session is closed JasperServer
@@ -80,7 +104,7 @@ class JasperServer:
         command = ['java', '-Djava.awt.headless=true', '-Xmx1024M',
                    'com.nantic.jasperreports.JasperServer',
                    unicode(self.port)]
-        process = subprocess.Popen(command, env=env, cwd=cwd)
+        process = subprocess.Popen(command, env=env, cwd=JASPER_CWD)
 
         if tools.config['jasperpid']:
             with open(tools.config['jasperpid'], 'w') as f:

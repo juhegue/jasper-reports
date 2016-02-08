@@ -41,10 +41,10 @@ import os
 import time
 
 from openerp import release, tools, report, pooler, models
-from . JasperReports.BrowseDataGenerator import CsvBrowseDataGenerator
-from . JasperReports.JasperServer import JasperServer
-from . JasperReports.RecordDataGenerator import CsvRecordDataGenerator
-from . JasperReports.JasperReport import JasperReport
+from .JasperReports.BrowseDataGenerator import CsvBrowseDataGenerator
+from .JasperReports.JasperServer import JasperServer
+from .JasperReports.RecordDataGenerator import CsvRecordDataGenerator
+from .JasperReports.JasperReport import JasperReport
 
 _logger = logging.getLogger(__name__)
 
@@ -56,38 +56,39 @@ def _assert_dir(d):
     return d
 
 
-def jasper_data_dir():
-    """ Get -or create- the Jasper Reports' data dir. """
+def jasper_reports_dir():
+    """ Get -or create- the JasperReports' data dir. """
     d = os.path.join(tools.config['data_dir'], 'jasper_reports', release.series)
     return _assert_dir(d)
 
 
-def get_file_path(*args):
+def jasper_reports_file(*args):
     """ All args will be treated as folders except the last one. """
-    d = os.path.join(tools.config['jasperdata'], *args[:-1])
+    d = os.path.join(jasper_reports_dir(), *args[:-1])
     return os.path.join(_assert_dir(d), args[-1])
 
 
-# Determines the port where the JasperServer process should listen
-# with its XML-RPC server for incomming calls
+# Port where JasperServer receives incomming calls
 tools.config['jasperport'] = tools.config.get('jasperport', 8090)
-
-# Determines where whill be stored all the JasperReports' data
-tools.config['jasperdata'] = tools.config.get('jasperdata', jasper_data_dir())
-
-# Determines the file name where the process ID of the
-# JasperServer process should be stored
-tools.config['jasperpid'] = tools.config.get('jasperpid', os.path.join(
-    tools.config['jasperdata'], 'openerp-jasper.pid'))
-
-# Determines if temporary files will be removed
+# Full path of the file that stores PID
+tools.config['jasperpid'] = tools.config.get(
+    'jasperpid', jasper_reports_file('openerp-jasper.pid'))
+# Enable temporary files deletion
 tools.config['jasperunlink'] = tools.config.get('jasperunlink', True)
 
-_logger.info('Initalizing JasperReports...')
-_logger.info('Port: %s', tools.config['jasperport'])
-_logger.info('Data: %s', tools.config['jasperdata'])
-_logger.info('Pidfile: %s', tools.config['jasperpid'])
-_logger.info('Remove temporary files: %s', tools.config['jasperunlink'])
+# Other options - FIXME
+# tools.config['jasper_cache'] = tools.config.get('jasper_cache', True)
+# tools.config['jasper_database'] = tools.config.get('jasper_database', 'stable8'))
+# tools.config['jasper_user'] = tools.config.get('jasper_user', 'admin')
+# tools.config['jasper_password'] = tools.config.get('jasper_password', 'a')
+# tools.config['jasper_depth'] = tools.config.get('jasper_depth', 3)
+# tools.config['jasper_language'] = tools.config.get('jasper_language', 'en')
+
+_logger.debug('Initalizing JasperReports...')
+_logger.debug('Port: %s', tools.config['jasperport'])
+_logger.debug('Data: %s', jasper_reports_dir())
+_logger.debug('Pidfile: %s', tools.config['jasperpid'])
+_logger.debug('Remove temporary files: %s', tools.config['jasperunlink'])
 
 
 class Report:

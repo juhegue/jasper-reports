@@ -89,5 +89,6 @@ docs/_build/
 
 # Log files
 *.log
-jasper_reports/java/jasperserver.log
 
+# Jasper files
+*.jasper
