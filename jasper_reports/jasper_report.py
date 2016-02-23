@@ -33,14 +33,14 @@
 #
 ##############################################################################
 
-
-import openerp
 import tempfile
 import logging
 import os
 import time
 
+import openerp
 from openerp import release, tools, report, pooler, models
+
 from .JasperReports.BrowseDataGenerator import CsvBrowseDataGenerator
 from .JasperReports.JasperServer import JasperServer
 from .JasperReports.RecordDataGenerator import CsvRecordDataGenerator
@@ -49,30 +49,12 @@ from .JasperReports.JasperReport import JasperReport
 _logger = logging.getLogger(__name__)
 
 
-def _assert_dir(d):
-    if not os.path.exists(d):
-        os.makedirs(d, 0o700)
-    assert os.access(d, os.W_OK), '%s: directory is not writable' % (d)
-    return d
-
-
-def jasper_reports_dir():
-    """ Get -or create- the JasperReports' data dir. """
-    d = os.path.join(tools.config['data_dir'], 'jasper_reports', release.series)
-    return _assert_dir(d)
-
-
-def jasper_reports_file(*args):
-    """ All args will be treated as folders except the last one. """
-    d = os.path.join(jasper_reports_dir(), *args[:-1])
-    return os.path.join(_assert_dir(d), args[-1])
-
-
 # Port where JasperServer receives incomming calls
 tools.config['jasperport'] = tools.config.get('jasperport', 8090)
 # Full path of the file that stores PID
 tools.config['jasperpid'] = tools.config.get(
-    'jasperpid', jasper_reports_file('openerp-jasper.pid'))
+    'jasperpid', os.path.join(
+        tools.config.jasper_data_dir, 'openerp-jasper.pid'))
 # Enable temporary files deletion
 tools.config['jasperunlink'] = tools.config.get('jasperunlink', True)
 
@@ -86,7 +68,7 @@ tools.config['jasperunlink'] = tools.config.get('jasperunlink', True)
 
 _logger.debug('Initalizing JasperReports...')
 _logger.debug('Port: %s', tools.config['jasperport'])
-_logger.debug('Data: %s', jasper_reports_dir())
+_logger.debug('Data: %s', tools.config.jasper_data_dir)
 _logger.debug('Pidfile: %s', tools.config['jasperpid'])
 _logger.debug('Remove temporary files: %s', tools.config['jasperunlink'])
 
@@ -288,8 +270,7 @@ class Report:
         }
         if 'parameters' in self.data:
             parameters.update(self.data['parameters'])
-
-        server = JasperServer(int(tools.config['jasperport']))
+        server = JasperServer(int(tools.config['jasperport']), self.cr.dbname)
         server.setPidFile(tools.config['jasperpid'])
         return server.execute(connectionParameters, self.reportPath,
                               outputFile, parameters)

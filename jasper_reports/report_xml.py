@@ -7,6 +7,8 @@
 #                         Vikasa Infinity Anugrah <http://www.infi-nity.com>
 # Copyright (C) 2011-Today Serpent Consulting Services Pvt. Ltd.
 #                         (<http://www.serpentcs.com>)
+# Copyright (C) 2015-Today Diagram Software, S.L.
+#                         (<http://www.diagram.es>)
 #
 # WARNING: This program as such is intended to be used by professional
 # programmers who take the whole responsability of assessing all potential
@@ -39,9 +41,8 @@ from xml.dom.minidom import getDOMImplementation
 import logging
 
 from . import jasper_report
-from jasper_report import jasper_reports_file
 
-from openerp import api, exceptions, fields, models, _
+from openerp import api, exceptions, fields, models, tools, _
 
 src_chars = """ '"()/*-+?¿!&$[]{}@#`'^:;<>=~%,\\"""
 src_chars = unicode(src_chars, 'iso-8859-1')
@@ -56,7 +57,8 @@ class IrActionsReportXmlFile(models.Model):
     _name = 'ir.actions.report.xml.file'
     _order = 'filename asc'
 
-    file = fields.Binary('File', compute='_compute_file', inverse='_inverse_file')
+    file = fields.Binary(
+        'File', compute='_compute_file', inverse='_inverse_file')
     filename = fields.Char('File Name', size=256, required=True)
     filepath = fields.Char('File Path', size=256, compute='_compute_filepath')
     report_id = fields.Many2one(
@@ -66,6 +68,25 @@ class IrActionsReportXmlFile(models.Model):
     _sql_constraints = [
         ('name_uniq', 'unique(filename)', 'The file name must be unique')
     ]
+
+    @api.multi
+    @api.depends('filename')
+    def _compute_filepath(self):
+        dbname = self.env.cr.dbname
+        d = os.path.join(tools.config.jasper_data_dir, self.env.cr.dbname)
+        if not os.path.isdir(d):
+            os.makedirs(d, 0o700)
+
+        for rec in self:
+            if rec.filename:
+                # Ensure that the given file name cannot cheat the FS
+                if not slash_free_pattern.match(rec.filename):
+                    raise exceptions.ValidationError(_(
+                        'The file name cannot contain slashes (/) nor '
+                        'backslashes (\\): %s') % (rec.filename,))
+
+                rec.filepath = os.path.join(
+                    tools.config.jasper_data_dir, dbname, rec.filename)
 
     @api.multi
     def _compute_file(self):
@@ -78,19 +99,6 @@ class IrActionsReportXmlFile(models.Model):
                         rec.file = f.read().encode('base64')
                 except Exception as e:
                     _logger.exception('Unable to read %s: %s', rec.filepath, e)
-
-    @api.multi
-    @api.depends('filename')
-    def _compute_filepath(self):
-        for rec in self:
-            if rec.filename:
-                # Ensure that the given file name cannot cheat the FS
-                if not slash_free_pattern.match(rec.filename):
-                    raise exceptions.ValidationError(_(
-                        'The file name cannot contain slashes (/) nor '
-                        'backslashes (\\): %s') % (rec.filename,))
-
-                rec.filepath = jasper_reports_file(self.env.cr.dbname, rec.filename)
 
     @api.multi
     def _inverse_file(self):
@@ -280,7 +288,8 @@ class IrActionsReportXml(models.Model):
             if language:
                 # Obtain field string for user's language.
                 name = pool.get('ir.translation')._get_source(
-                    self.env.cr, self.env.uid, '%s,%s' % (modelName, field), 'field', language)
+                    self.env.cr, self.env.uid, '%s,%s' % (modelName, field),
+                    'field', language)
             if not name:
                 # If there's not description in user's language,
                 # use default (english) one.

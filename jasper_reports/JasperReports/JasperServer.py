@@ -7,6 +7,8 @@
 #                         Vikasa Infinity Anugrah <http://www.infi-nity.com>
 # Copyright (C) 2011-Today Serpent Consulting Services Pvt. Ltd.
 #                         (<http://www.serpentcs.com>)
+# Copyright (C) 2015-Today Diagram Software, S.L.
+#                         (<http://www.diagram.es>)
 #
 # WARNING: This program as such is intended to be used by professional
 # programmers who take the whole responsability of assessing all potential
@@ -33,8 +35,6 @@
 
 import os
 import time
-import errno
-import signal
 import socket
 import subprocess
 import xmlrpclib
@@ -44,26 +44,21 @@ from openerp import modules, tools
 from openerp.exceptions import except_orm
 from openerp.tools.translate import _
 
-MODULE_PATH = modules.get_module_path('jasper_reports')
-JASPER_CWD = os.path.join(MODULE_PATH, 'java')
+JASPER_CWD = modules.get_module_resource('jasper_reports', 'java')
+JASPER_LIB = os.path.join(JASPER_CWD, 'lib', '*')
+CUSTOM_REPORTS = modules.get_module_resource(
+    'jasper_reports', 'custom_reports')
+CLASSPATH_SEPARATOR = ';' if os.name == 'nt' else ':'
 
 
-def abslistdir(d):
-    """ Return child directories. """
-    for f in os.listdir(d):
-        res = os.path.join(d, f)
-        if os.path.isdir(res):
-            yield res
-
-
-class JasperServer:
-    def __init__(self, port=8090):
+class JasperServer(object):
+    def __init__(self, port=8090, dbname=None):
         self.port = port
         self.pidfile = None
         url = 'http://localhost:%d' % port
         self.proxy = xmlrpclib.ServerProxy(url, allow_none=True)
         self.logger = logging.getLogger(__name__)
-        self._classpath = self.build_classpath()
+        self._classpath = self.build_classpath(dbname)
         self.logger.debug('CLASSPATH=%s', self._classpath)
 
     def error(self, message):
@@ -76,22 +71,20 @@ class JasperServer:
     def setPidFile(self, pidfile):  # [DEPRECATED]
         self.pidfile = pidfile
 
-    def build_classpath(self):
+    def build_classpath(self, dbname):
         """
-        Build the CLASSPATH variable. It consists of:
+        Return CLASSPATH. It is composed of:
             * jasper_reports/java: JasperReport's main folder
             * jasper_reports/java/lib/*: Java libraries
             * jasper_reports/custom_reports: Common report files
             * <data_dir>/jasper_reports/<release>/<dbname>: DB report files
         """
-        from openerp.addons.jasper_reports.jasper_report import jasper_reports_dir
-        classpath_separator = ';' if os.name == 'nt' else ':'
-        return classpath_separator.join([
+        return CLASSPATH_SEPARATOR.join([
             JASPER_CWD,
-            os.path.join(JASPER_CWD, 'lib', '*'),
-            os.path.join(MODULE_PATH, 'custom_reports'),
-            # + DB directories
-        ] + [d for d in abslistdir(jasper_reports_dir())])
+            JASPER_LIB,
+            CUSTOM_REPORTS,
+            os.path.join(tools.config.jasper_data_dir, dbname)
+        ])
 
     def start(self):
         env = os.environ.copy()
