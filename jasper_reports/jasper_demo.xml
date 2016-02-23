@@ -10,19 +10,27 @@
             <field name="name">Jasper Users</field>
             <field name="report_name">res.user.jaspertest</field>
             <!-- <field name="rml">jasper_reports/demo/user.jrxml</field> -->
-            <field name="report_rml">jasper_reports/demo/user.jrxml</field>
+            <!-- <field name="report_rml">jasper_reports/demo/user.jrxml</field> -->
             <!-- <field name="menu" eval="True"/> -->
             <field name="header" eval="False"/>
             <field name="jasper_report" eval="True"/>
             <field name="jasper_output">pdf</field>
         </record>
 
-        <record id="res_users_jaspertest_values" model="ir.values">
+        <record id="res_users_jaspertest_file_default" model="ir.actions.report.xml.file">
+            <field name="file" type="base64" file="jasper_reports/demo/user.jrxml"/>
+            <field name="filename">user.jrxml</field>
+            <field name="report_id" ref="res_users_jaspertest"/>
+            <field name="default" eval="True"/>
+        </record>
+
+        <!-- It will be automatically created -->
+        <!-- <record id="res_users_jaspertest_values" model="ir.values">
             <field name="name">Jasper Users</field>
             <field name="model">res.users</field>
             <field name="key2">client_print_multi</field>
             <field name="value" eval="'ir.actions.report.xml,%d'%res_users_jaspertest"/>
-        </record>
+        </record> -->
 
         <record id="res_partner_jaspertest" model="ir.actions.report.xml">
             <!-- <field name="string">Jasper Partners</field> -->
@@ -32,19 +40,27 @@
             <field name="name">Jasper Partners</field>
             <field name="report_name">res.partner.jaspertest</field>
             <!-- <field name="rml">jasper_reports/demo/partner.jrxml</field> -->
-            <field name="report_rml">jasper_reports/demo/partner.jrxml</field>
+            <!-- <field name="report_rml">jasper_reports/demo/partner.jrxml</field> -->
             <!-- <field name="menu" eval="True"/> -->
             <field name="header" eval="False"/>
             <field name="jasper_report" eval="True"/>
             <field name="jasper_output">pdf</field>
         </record>
 
-        <record id="res_partner_jaspertest_values" model="ir.values">
+        <record id="res_partner_jaspertest_file_default" model="ir.actions.report.xml.file">
+            <field name="file" type="base64" file="jasper_reports/demo/partner.jrxml"/>
+            <field name="filename">partner.jrxml</field>
+            <field name="report_id" ref="res_partner_jaspertest"/>
+            <field name="default" eval="True"/>
+        </record>
+
+        <!-- It will be automatically created -->
+        <!-- <record id="res_partner_jaspertest_values" model="ir.values">
             <field name="name">Jasper Partners</field>
             <field name="model">res.partner</field>
             <field name="key2">client_print_multi</field>
             <field name="value" eval="'ir.actions.report.xml,%d'%res_partner_jaspertest"/>
-        </record>
+        </record> -->
 
     </data>
 </openerp>
