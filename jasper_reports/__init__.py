@@ -31,6 +31,7 @@
 #
 ##############################################################################
 
+from . import config
 from . import jasper_report
 from . import report_xml
 from . import wizard
