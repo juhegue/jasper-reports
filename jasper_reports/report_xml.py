@@ -120,7 +120,8 @@ class IrActionsReportXmlFile(models.Model):
 
     @api.multi
     def write(self, vals):
-        if 'filename' in vals and vals['filename'] != self.filename:
+        if vals.get('filename', self.filename) != self.filename \
+                and os.path.isfile(self.filepath):
             _logger.info('Deleting %s...', self.filepath)
             os.unlink(self.filepath)
         res = super(IrActionsReportXmlFile, self).write(vals)

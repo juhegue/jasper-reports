@@ -293,7 +293,29 @@ class report_jasper(report.interface.report_int):
         self.model = model
         self.parser = parser
 
+    @staticmethod
+    def _merge_pdfs(documents):
+        from pyPdf import PdfFileWriter, PdfFileReader
+        try:
+            from cStringIO import StringIO
+        except ImportError:
+            from StringIO import StringIO
+        output = PdfFileWriter()
+        for document in documents:
+            sio = StringIO(document)
+            reader = PdfFileReader(sio)
+            for page in xrange(reader.getNumPages()):
+                output.addPage(reader.getPage(page))
+        sio = StringIO()
+        output.write(sio)
+        return sio.getvalue()
+
     def create(self, cr, uid, ids, data, context):
+        # FIX: Split creation and join results to avoid empty subreports on multiple reports
+        if len(ids) > 1:
+            documents = [self.create(cr, uid, [id], dict(data), context)[0] for id in ids]
+            return (self._merge_pdfs(documents), 'pdf')
+
         name = self.name
         if self.parser:
             d = self.parser(cr, uid, ids, data, context)
@@ -311,6 +333,7 @@ class report_jasper(report.interface.report_int):
         r = Report(name, cr, uid, ids, data, context)
         # return ( r.execute(), 'pdf' )
         return r.execute()
+
 
 if release.major_version == '5.0':
     # Version 5.0 specific code
