@@ -253,6 +253,7 @@ class Report:
 
     def executeReport(self, dataFile, outputFile, subreportDataFiles):
         locale = self.context.get('lang', 'en_US')
+        user = self.pool['res.users'].browse(self.cr, self.uid, self.uid, self.context)
 
         connectionParameters = {
             'output': self.outputFormat,
@@ -263,11 +264,15 @@ class Report:
             'password': self.password(),
             'subreports': subreportDataFiles,
         }
+
         parameters = {
             'STANDARD_DIR': self.report.standardDirectory(),
             'REPORT_LOCALE': locale,
             'IDS': self.ids,
+            # addons/base/ir/ir_fields.py:213  -  ir_fields_converter._input_tz
+            'REPORT_TIME_ZONE': self.context.get('tz') or user.tz or 'UTC'
         }
+
         if 'parameters' in self.data:
             parameters.update(self.data['parameters'])
         server = JasperServer(int(tools.config['jasperport']), self.cr.dbname)

@@ -80,6 +80,7 @@ import java.lang.Class;
 import java.math.BigDecimal;
 import java.io.InputStream;
 import java.util.Locale;
+import java.util.TimeZone;
 
 
 
@@ -170,6 +171,16 @@ public class JasperServer {
                 // with the CsvMultiLanguageDataSource.
                 translator = new Translator( bundlePath(jrxmlPath), locale );
                 parameters.put( "TRANSLATOR", translator );
+
+            } else if( jparam.getValueClassName().equals( "java.util.TimeZone" )){
+                // REPORT_TIME_ZONE
+                if ( ! parameters.containsKey( jparam.getName() ) ) {
+                    continue;
+                }
+
+                String tzId = ((String)parameters.get( jparam.getName() ));
+                TimeZone tz = TimeZone.getTimeZone(tzId);
+                parameters.put( jparam.getName(), tz );
 
             } else if( jparam.getValueClassName().equals( "java.lang.BigDecimal" )){
                 Object param = parameters.get( jparam.getName());
