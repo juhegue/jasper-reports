@@ -298,28 +298,32 @@ class report_jasper(report.interface.report_int):
         self.model = model
         self.parser = parser
 
-    @staticmethod
-    def _merge_pdfs(documents):
-        from pyPdf import PdfFileWriter, PdfFileReader
-        try:
-            from cStringIO import StringIO
-        except ImportError:
-            from StringIO import StringIO
-        output = PdfFileWriter()
-        for document in documents:
-            sio = StringIO(document)
-            reader = PdfFileReader(sio)
-            for page in xrange(reader.getNumPages()):
-                output.addPage(reader.getPage(page))
-        sio = StringIO()
-        output.write(sio)
-        return sio.getvalue()
+    # @staticmethod
+    # def _merge_pdfs(documents):
+    #     from pyPdf import PdfFileWriter, PdfFileReader
+    #     try:
+    #         from cStringIO import StringIO
+    #     except ImportError:
+    #         from StringIO import StringIO
+    #     output = PdfFileWriter()
+    #     for document in documents:
+    #         sio = StringIO(document)
+    #         reader = PdfFileReader(sio)
+    #         for page in xrange(reader.getNumPages()):
+    #             output.addPage(reader.getPage(page))
+    #     sio = StringIO()
+    #     output.write(sio)
+    #     return sio.getvalue()
 
     def create(self, cr, uid, ids, data, context):
         # FIX: Split creation and join results to avoid empty subreports on multiple reports
-        if len(ids) > 1:
-            documents = [self.create(cr, uid, [id], dict(data), context)[0] for id in ids]
-            return (self._merge_pdfs(documents), 'pdf')
+        # PARA CRISTIAN: No entiendo porque has hecho esto si al final el sistema los une todos
+        # aunque no en diferentes paginas, pero es que en los otros infomes que no son pdf
+        # da error, a lo sumo sería mejor parametrizarlo
+        # if len(ids) > 1:
+        #     import pdb; pdb.set_trace()
+        #     documents = [self.create(cr, uid, [id], dict(data), context)[0] for id in ids]
+        #     return (self._merge_pdfs(documents), 'pdf')
 
         name = self.name
         if self.parser:
