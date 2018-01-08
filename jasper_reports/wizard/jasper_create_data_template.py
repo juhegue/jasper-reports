@@ -43,8 +43,8 @@ class create_data_template(models.TransientModel):
     def action_create_xml(self):
         for rec in self:
             for data in rec.read([]):
-                dynamic_fields = data['dynamic_fields']
-                if dynamic_fields:
+                if data['dynamic']:
+                    dynamic_fields = data['dynamic_fields']
                     xml = "<data><record>"
                     for field in dynamic_fields.split(','):
                         name_value = field.split('|')
@@ -76,7 +76,7 @@ class create_data_template(models.TransientModel):
 
     dynamic = fields.Boolean('Dynamic Template')
     dynamic_fields = fields.Text('Fields')
-    model = fields.Many2one('ir.model', 'Model', required=True)
+    model = fields.Many2one('ir.model', 'Model')
     depth = fields.Integer("Depth", required=True, default=1)
     filename = fields.Char('File Name', size=32)
     data = fields.Binary('XML')
