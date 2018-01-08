@@ -85,6 +85,11 @@ def dynamic_generator(self, dataFile, subreportDataFiles):
                 field_type = record._columns[field]._type
             elif field in record._inherit_fields:
                 field_type = record._inherit_fields[field][2]._type
+            elif field in record._fields:
+                # As per Odoo reference, non-stored computed fields created
+                # using the new API style are *NOT* available in `_columns`
+                # and can only be inspected though `_fields`.
+                field_type = record._fields[field].type
 
             if field_type in ('many2one', 'one2many', 'many2many'):
                 if len(fields[1:]):

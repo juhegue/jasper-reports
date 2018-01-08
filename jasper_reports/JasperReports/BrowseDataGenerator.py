@@ -317,6 +317,9 @@ class CsvBrowseDataGenerator(BrowseDataGenerator):
     # If there are any elements in the OPENERP_RELATIONS list,
     # they will imply a LEFT JOIN like behaviour on the rows to be shown.
     def generate(self, fileName):
+        if hasattr(self.report, '_module'):
+            self.dynamic_class = self.report._module.__dict__["DataFunction"](self.model, self.pool, self.cr,
+                                                                              self.uid, self.ids, self._context)
         self.allRecords = []
         relations = self.report.relations()
         # The following loop generates one entry to allRecords list
@@ -360,9 +363,7 @@ class CsvBrowseDataGenerator(BrowseDataGenerator):
             writer.writerow(header)
             # Once all records have been calculated,
             # create the CSV structure itself
-            for n, records in enumerate(self.allRecords):
-                if n == 0 and hasattr(self.report, '_module'):
-                    self.dynamic_class = self.report._module.__dict__["DataFunction"](self.model, self.pool, self.cr, self.uid, self.ids, self._context, records['root'])
+            for records in self.allRecords:
                 row = {}
                 self.generateCsvRecord(records['root'], records, row, '',
                                        self.report.fields(),
