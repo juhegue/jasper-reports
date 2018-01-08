@@ -134,55 +134,59 @@ class Report:
 
         start = time.time()
 
-        # If the language used is xpath create the xmlFile in dataFile.
-        if self.report.language() == 'xpath':
-            if self.data.get('data_source', 'model') == 'records':
-                generator = CsvRecordDataGenerator(self.report,
-                                                   self.data['records'])
-            else:
-                generator = CsvBrowseDataGenerator(self.report, self.model,
-                                                   self.pool, self.cr,
-                                                   self.uid, self.ids,
-                                                   self.context)
-            generator.generate(dataFile)
-            self.temporaryFiles += generator.temporaryFiles
-
         subreportDataFiles = []
-        for subreportInfo in self.report.subreports():
-            subreport = subreportInfo['report']
-            if subreport.language() == 'xpath':
-                message = 'Creating CSV '
-                if subreportInfo['pathPrefix']:
-                    message += 'with prefix %s ' % subreportInfo['pathPrefix']
-                else:
-                    message += 'without prefix '
-                message += 'for file %s' % subreportInfo['filename']
-                _logger.info("%s" % message)
-
-                fd, subreportDataFile = tempfile.mkstemp()
-                os.close(fd)
-                subreportDataFiles.append({
-                    'parameter': subreportInfo['parameter'],
-                    'dataFile': subreportDataFile,
-                    'jrxmlFile': subreportInfo['filename'],
-                })
-                self.temporaryFiles.append(subreportDataFile)
-
-                if subreport.isHeader():
-                    generator = CsvBrowseDataGenerator(subreport,
-                                                       'res.users', self.pool,
-                                                       self.cr, self.uid,
-                                                       [self.uid],
-                                                       self.context)
-                elif self.data.get('data_source', 'model') == 'records':
-                    generator = CsvRecordDataGenerator(subreport,
+        if hasattr(self.report, '_dynamic'):
+            from dynamic_generator import dynamic_generator
+            dynamic_generator(self, dataFile, subreportDataFiles)
+        else:
+            # If the language used is xpath create the xmlFile in dataFile.
+            if self.report.language() == 'xpath':
+                if self.data.get('data_source', 'model') == 'records':
+                    generator = CsvRecordDataGenerator(self.report,
                                                        self.data['records'])
                 else:
-                    generator = CsvBrowseDataGenerator(subreport, self.model,
+                    generator = CsvBrowseDataGenerator(self.report, self.model,
                                                        self.pool, self.cr,
                                                        self.uid, self.ids,
                                                        self.context)
-                generator.generate(subreportDataFile)
+                generator.generate(dataFile)
+                self.temporaryFiles += generator.temporaryFiles
+
+            for subreportInfo in self.report.subreports():
+                subreport = subreportInfo['report']
+                if subreport.language() == 'xpath':
+                    message = 'Creating CSV '
+                    if subreportInfo['pathPrefix']:
+                        message += 'with prefix %s ' % subreportInfo['pathPrefix']
+                    else:
+                        message += 'without prefix '
+                    message += 'for file %s' % subreportInfo['filename']
+                    _logger.info("%s" % message)
+
+                    fd, subreportDataFile = tempfile.mkstemp()
+                    os.close(fd)
+                    subreportDataFiles.append({
+                        'parameter': subreportInfo['parameter'],
+                        'dataFile': subreportDataFile,
+                        'jrxmlFile': subreportInfo['filename'],
+                    })
+                    self.temporaryFiles.append(subreportDataFile)
+
+                    if subreport.isHeader():
+                        generator = CsvBrowseDataGenerator(subreport,
+                                                           'res.users', self.pool,
+                                                           self.cr, self.uid,
+                                                           [self.uid],
+                                                           self.context)
+                    elif self.data.get('data_source', 'model') == 'records':
+                        generator = CsvRecordDataGenerator(subreport,
+                                                           self.data['records'])
+                    else:
+                        generator = CsvBrowseDataGenerator(subreport, self.model,
+                                                           self.pool, self.cr,
+                                                           self.uid, self.ids,
+                                                           self.context)
+                    generator.generate(subreportDataFile)
 
         # Call the external java application that will generate the
         # PDF file in outputFile

@@ -8,8 +8,10 @@
 			<field name="arch" type="xml">
 				<form string="Create Data Template">
 					<group colspan="2">
-						<field name="model" />
-						<field name="depth" />
+						<field name="dynamic" />
+						<field name="dynamic_fields" placeholder="Lista de campos compuestos por Nombre|Valor y separados por comas" attrs="{'invisible':[('dynamic', '=', False)], 'required':[('dynamic', '=', True)]}"/>
+						<field name="model" attrs="{'invisible':[('dynamic', '=', True)], 'required':[('dynamic', '=', False)]}"/>
+						<field name="depth" attrs="{'invisible':[('dynamic', '=', True)], 'required':[('dynamic', '=', False)]}"/>
 						<field name="data" filename="filename" readonly="1" />
 						<field name="filename" invisible="1" />
 					</group>

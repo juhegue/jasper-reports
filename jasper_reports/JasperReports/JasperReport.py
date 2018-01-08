@@ -179,6 +179,22 @@ class JasperReport:
         if headerTags and 'value' in headerTags[0].keys():
             self._isHeader = True
 
+        if doc.xpath( '/jr:jasperReport/jr:property[@name="OPENERP_MODULE"]', namespaces=nss ):
+            path = self.standardDirectory()
+            mod = "{}.py".format(os.path.splitext(os.path.split(self._reportPath)[1])[0])
+            nom_module = os.path.join(path, 'dynamic_modules', mod)
+            try:
+                with open(nom_module) as f:
+                    code = compile(f.read(), nom_module, 'exec')
+                    import imp
+                    self._module = imp.new_module(mod)
+                    exec code in self._module.__dict__
+            except:
+                raise Exception('ERROR OPENERP_MODULE:%s' % mod)
+
+            if doc.xpath('/jr:jasperReport/jr:property[@name="OPENERP_DYNAMIC"]', namespaces=nss):
+                self._dynamic = True
+
         fieldTags = doc.xpath('/jr:jasperReport/jr:field', namespaces=nss)
         self._fields, self._fieldNames = self.extractFields(fieldTags, ns)
 

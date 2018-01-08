@@ -360,7 +360,9 @@ class CsvBrowseDataGenerator(BrowseDataGenerator):
             writer.writerow(header)
             # Once all records have been calculated,
             # create the CSV structure itself
-            for records in self.allRecords:
+            for n, records in enumerate(self.allRecords):
+                if n == 0 and hasattr(self.report, '_module'):
+                    self.dynamic_class = self.report._module.__dict__["DataFunction"](self.model, self.pool, self.cr, self.uid, self.ids, self._context, records['root'])
                 row = {}
                 self.generateCsvRecord(records['root'], records, row, '',
                                        self.report.fields(),
@@ -411,10 +413,15 @@ class CsvBrowseDataGenerator(BrowseDataGenerator):
                 elif hasattr(record, root):
                     value = getattr(record, root)
                 else:
-                    value = None
-                    wrng6 = "Field '%s' (path: %s) does not \
-                    exist in model '%s'."
-                    self.warning(wrng6 % (root, currentPath, record._name))
+                    if hasattr(self.report, '_module') and field.startswith('__'):
+                        # function with 20 characters max.
+                        fun = getattr(self.dynamic_class, field[2:22])
+                        field_type, value = fun(record)
+                    else:
+                        value = None
+                        wrng6 = "Field '%s' (path: %s) does not \
+                        exist in model '%s'."
+                        self.warning(wrng6 % (root, currentPath, record._name))
 
             # Check if it's a many2one
             if isinstance(value, orm.browse_record):

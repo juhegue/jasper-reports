@@ -43,9 +43,23 @@ class create_data_template(models.TransientModel):
     def action_create_xml(self):
         for rec in self:
             for data in rec.read([]):
-                model = self.env['ir.model'].browse(data['model'][0])
-                xml = self.env['ir.actions.report.xml'
-                               ].create_xml(model.model, data['depth'])
+                dynamic_fields = data['dynamic_fields']
+                if dynamic_fields:
+                    xml = "<data><record>"
+                    for field in dynamic_fields.split(','):
+                        name_value = field.split('|')
+                        if len(name_value) > 1:
+                            name = '|'.join(name_value[:-1]).strip()
+                            value = name_value[-1].strip()
+                        else:
+                            name = name_value[0].strip()
+                            value = name.lower()
+                        xml += '<%s>%s</%s>' % (name, value, name)
+                    xml += "</record></data>"
+                else:
+                    model = self.env['ir.model'].browse(data['model'][0])
+                    xml = self.env['ir.actions.report.xml'
+                                   ].create_xml(model.model, data['depth'])
                 rec.write({
                     'data': base64.encodestring(xml),
                     'filename': 'template.xml'
@@ -60,6 +74,8 @@ class create_data_template(models.TransientModel):
             'target': 'new',
         }
 
+    dynamic = fields.Boolean('Dynamic Template')
+    dynamic_fields = fields.Text('Fields')
     model = fields.Many2one('ir.model', 'Model', required=True)
     depth = fields.Integer("Depth", required=True, default=1)
     filename = fields.Char('File Name', size=32)
